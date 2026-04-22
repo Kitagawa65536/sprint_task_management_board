@@ -4,6 +4,8 @@ enum TaskStatus { todo, inProgress, done }
 
 enum TaskPriority { low, medium, high }
 
+const _descriptionUnchanged = Object();
+
 class Task {
   Task({
     String? id,
@@ -16,11 +18,30 @@ class Task {
        createdAt = createdAt ?? DateTime.now();
 
   final String id;
-  String title;
-  String? description;
-  TaskStatus status;
-  TaskPriority priority;
+  final String title;
+  final String? description;
+  final TaskStatus status;
+  final TaskPriority priority;
   final DateTime createdAt;
+
+  Task copyWith({
+    String? title,
+    Object? description = _descriptionUnchanged,
+    TaskStatus? status,
+    TaskPriority? priority,
+    DateTime? createdAt,
+  }) {
+    return Task(
+      id: id,
+      title: title ?? this.title,
+      description: identical(description, _descriptionUnchanged)
+          ? this.description
+          : description as String?,
+      status: status ?? this.status,
+      priority: priority ?? this.priority,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 
   static List<Task> sampleTasks() {
     return [
