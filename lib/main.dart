@@ -30,6 +30,14 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
       ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.indigo,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      themeMode: ThemeMode.system,
       home: const SprintBoardPage(),
     );
   }
@@ -53,9 +61,23 @@ class SprintBoardPage extends ConsumerWidget {
     });
 
     final taskListState = ref.watch(taskListProvider);
+    final totalTasks = taskListState.valueOrNull?.length ?? 0;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('スプリントボード')),
+      appBar: AppBar(
+        title: const Text('スプリントボード'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: Text(
+                '（$totalTasks）',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openTaskCreatePage(context, ref),
         child: const Icon(Icons.add),
@@ -85,8 +107,12 @@ class SprintBoardPage extends ConsumerWidget {
                       width: columnWidth,
                       tasksProvider: todoTasksProvider,
                       onTaskTap: (task) => _showTaskDetails(context, ref, task),
-                      onTaskAccepted: (task) =>
-                          _updateTaskStatus(context, ref, task, TaskStatus.todo),
+                      onTaskAccepted: (task) => _updateTaskStatus(
+                        context,
+                        ref,
+                        task,
+                        TaskStatus.todo,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     _BoardColumn(
@@ -109,8 +135,12 @@ class SprintBoardPage extends ConsumerWidget {
                       width: columnWidth,
                       tasksProvider: doneTasksProvider,
                       onTaskTap: (task) => _showTaskDetails(context, ref, task),
-                      onTaskAccepted: (task) =>
-                          _updateTaskStatus(context, ref, task, TaskStatus.done),
+                      onTaskAccepted: (task) => _updateTaskStatus(
+                        context,
+                        ref,
+                        task,
+                        TaskStatus.done,
+                      ),
                     ),
                   ],
                 ),
@@ -124,7 +154,7 @@ class SprintBoardPage extends ConsumerWidget {
 
   Future<void> _openTaskCreatePage(BuildContext context, WidgetRef ref) async {
     final result = await Navigator.of(context).push<_TaskFormResult>(
-      MaterialPageRoute(
+      _TaskFormPageRoute(
         fullscreenDialog: true,
         builder: (context) => _TaskFormPage(),
       ),
@@ -225,7 +255,7 @@ class SprintBoardPage extends ConsumerWidget {
     Task task,
   ) async {
     final result = await Navigator.of(context).push<_TaskFormResult>(
-      MaterialPageRoute(
+      _TaskFormPageRoute(
         fullscreenDialog: true,
         builder: (context) => _TaskFormPage(task: task),
       ),
@@ -331,13 +361,16 @@ class _BoardColumnState extends ConsumerState<_BoardColumn> {
   @override
   Widget build(BuildContext context) {
     final tasks = ref.watch(widget.tasksProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+    final headerColor = _statusColor(widget.status, colorScheme);
+    final containerColor = colorScheme.surfaceContainerLowest;
 
     return Container(
       width: widget.width,
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: containerColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -347,11 +380,22 @@ class _BoardColumnState extends ConsumerState<_BoardColumn> {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    widget.title,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: headerColor.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      widget.title,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: headerColor,
+                      ),
                     ),
                   ),
                 ),
@@ -361,13 +405,13 @@ class _BoardColumnState extends ConsumerState<_BoardColumn> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.indigo.shade50,
+                    color: headerColor.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
                     '${tasks.length}',
                     style: TextStyle(
-                      color: Colors.indigo.shade700,
+                      color: headerColor,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -414,26 +458,28 @@ class _BoardColumnState extends ConsumerState<_BoardColumn> {
                       ),
                     ),
                     child: tasks.isEmpty
-                        ? Center(
-                            child: Text(
-                              'タスクがありません',
-                              style: TextStyle(color: Colors.grey.shade600),
-                            ),
-                          )
-                        : ListView.separated(
+                        ? _EmptyColumnPlaceholder(status: widget.status)
+                        : ListView.builder(
                             padding: const EdgeInsets.all(6),
                             itemCount: tasks.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 10),
                             itemBuilder: (context, index) {
                               final task = tasks[index];
 
-                              return _TaskCard(
-                                task: task,
-                                cardWidth: widget.width - 36,
-                                priorityColor: _priorityColor(task.priority),
-                                priorityLabel: _priorityLabel(task.priority),
-                                createdAtLabel: _formatCreatedAt(task.createdAt),
-                                onTap: () => widget.onTaskTap(task),
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: index == tasks.length - 1 ? 0 : 10,
+                                ),
+                                child: _TaskCard(
+                                  task: task,
+                                  cardWidth: widget.width - 36,
+                                  priorityColor: _priorityColor(task.priority),
+                                  priorityLabel: _priorityLabel(task.priority),
+                                  priorityIcon: _priorityIcon(task.priority),
+                                  createdAtLabel: _formatCreatedAt(
+                                    task.createdAt,
+                                  ),
+                                  onTap: () => widget.onTaskTap(task),
+                                ),
                               );
                             },
                           ),
@@ -448,14 +494,37 @@ class _BoardColumnState extends ConsumerState<_BoardColumn> {
   }
 }
 
-class _TaskFormPage extends ConsumerWidget {
-  _TaskFormPage({this.task});
+class _TaskFormPage extends ConsumerStatefulWidget {
+  const _TaskFormPage({this.task});
 
   final Task? task;
-  final _formKey = GlobalKey<FormState>();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_TaskFormPage> createState() => _TaskFormPageState();
+}
+
+class _TaskFormPageState extends ConsumerState<_TaskFormPage> {
+  final _formKey = GlobalKey<FormState>();
+  late final FocusNode _titleFocusNode;
+  late final FocusNode _descriptionFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleFocusNode = FocusNode();
+    _descriptionFocusNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    _titleFocusNode.dispose();
+    _descriptionFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final task = widget.task;
     final formState = ref.watch(taskFormProvider(task));
 
     return Scaffold(
@@ -481,11 +550,16 @@ class _TaskFormPage extends ConsumerWidget {
             children: [
               TextFormField(
                 initialValue: formState.title,
+                focusNode: _titleFocusNode,
                 maxLength: 50,
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'タイトル',
                   border: OutlineInputBorder(),
                 ),
+                onFieldSubmitted: (_) {
+                  _descriptionFocusNode.requestFocus();
+                },
                 onChanged: ref
                     .read(taskFormProvider(task).notifier)
                     .updateTitle,
@@ -503,14 +577,17 @@ class _TaskFormPage extends ConsumerWidget {
               const SizedBox(height: 16),
               TextFormField(
                 initialValue: formState.description,
+                focusNode: _descriptionFocusNode,
                 maxLength: 200,
                 minLines: 4,
                 maxLines: 6,
+                textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(
                   labelText: '説明文',
                   alignLabelWithHint: true,
                   border: OutlineInputBorder(),
                 ),
+                onFieldSubmitted: (_) => _saveTask(context, ref),
                 onChanged: ref
                     .read(taskFormProvider(task).notifier)
                     .updateDescription,
@@ -571,11 +648,13 @@ class _TaskFormPage extends ConsumerWidget {
   }
 
   void _saveTask(BuildContext context, WidgetRef ref) {
+    FocusScope.of(context).unfocus();
+
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final formState = ref.read(taskFormProvider(task));
+    final formState = ref.read(taskFormProvider(widget.task));
     final description = formState.description.trim();
 
     Navigator.of(context).pop(
@@ -609,6 +688,7 @@ class _TaskCard extends StatelessWidget {
     required this.cardWidth,
     required this.priorityColor,
     required this.priorityLabel,
+    required this.priorityIcon,
     required this.createdAtLabel,
     required this.onTap,
   });
@@ -617,58 +697,89 @@ class _TaskCard extends StatelessWidget {
   final double cardWidth;
   final Color priorityColor;
   final String priorityLabel;
+  final IconData priorityIcon;
   final String createdAtLabel;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final card = Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                task.title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                task.description ?? '説明はありません',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.grey.shade700, height: 1.4),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: priorityColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  priorityLabel,
+        splashColor: priorityColor.withValues(alpha: 0.12),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: priorityColor, width: 4)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  task.title,
                   style: TextStyle(
-                    color: priorityColor,
-                    fontSize: 12,
                     fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    decoration: task.status == TaskStatus.done
+                        ? TextDecoration.lineThrough
+                        : null,
+                    color: task.status == TaskStatus.done
+                        ? colorScheme.onSurfaceVariant
+                        : null,
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                createdAtLabel,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Text(
+                  task.description ?? '説明はありません',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: priorityColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(priorityIcon, size: 14, color: priorityColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        priorityLabel,
+                        style: TextStyle(
+                          color: priorityColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  createdAtLabel,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -691,6 +802,16 @@ class _TaskCard extends StatelessWidget {
   }
 }
 
+class _TaskFormPageRoute<T> extends MaterialPageRoute<T> {
+  _TaskFormPageRoute({required super.builder, super.fullscreenDialog});
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 260);
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 220);
+}
+
 Color _priorityColor(TaskPriority priority) {
   switch (priority) {
     case TaskPriority.low:
@@ -699,6 +820,28 @@ Color _priorityColor(TaskPriority priority) {
       return Colors.amber;
     case TaskPriority.high:
       return Colors.red;
+  }
+}
+
+Color _statusColor(TaskStatus status, ColorScheme colorScheme) {
+  switch (status) {
+    case TaskStatus.todo:
+      return colorScheme.outline;
+    case TaskStatus.inProgress:
+      return colorScheme.primary;
+    case TaskStatus.done:
+      return Colors.green.shade700;
+  }
+}
+
+IconData _priorityIcon(TaskPriority priority) {
+  switch (priority) {
+    case TaskPriority.low:
+      return Icons.arrow_downward_rounded;
+    case TaskPriority.medium:
+      return Icons.remove_rounded;
+    case TaskPriority.high:
+      return Icons.arrow_upward_rounded;
   }
 }
 
@@ -730,5 +873,81 @@ String _statusLabel(TaskStatus status) {
       return '進行中';
     case TaskStatus.done:
       return '完了';
+  }
+}
+
+class _EmptyColumnPlaceholder extends StatelessWidget {
+  const _EmptyColumnPlaceholder({required this.status});
+
+  final TaskStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final accentColor = _statusColor(status, colorScheme);
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _emptyStateIcon(status),
+              size: 40,
+              color: accentColor.withValues(alpha: 0.9),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _emptyStateTitle(status),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _emptyStateMessage(status),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+IconData _emptyStateIcon(TaskStatus status) {
+  switch (status) {
+    case TaskStatus.todo:
+      return Icons.inbox_outlined;
+    case TaskStatus.inProgress:
+      return Icons.timelapse_rounded;
+    case TaskStatus.done:
+      return Icons.task_alt_rounded;
+  }
+}
+
+String _emptyStateTitle(TaskStatus status) {
+  switch (status) {
+    case TaskStatus.todo:
+      return 'タスクがありません';
+    case TaskStatus.inProgress:
+      return 'タスクがありません';
+    case TaskStatus.done:
+      return 'タスクがありません';
+  }
+}
+
+String _emptyStateMessage(TaskStatus status) {
+  switch (status) {
+    case TaskStatus.todo:
+      return '新しいタスクを追加するとここに表示されます。';
+    case TaskStatus.inProgress:
+      return '着手したタスクをここへ移動して進捗を管理できます。';
+    case TaskStatus.done:
+      return '完了したタスクはここに蓄積されます。';
   }
 }
