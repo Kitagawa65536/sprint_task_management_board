@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models/task.dart';
@@ -11,11 +10,13 @@ void main() {
 }
 
 class SprintBoardApp extends StatelessWidget {
-  const SprintBoardApp({super.key});
+  const SprintBoardApp({super.key, this.overrides = const []});
+
+  final List<Override> overrides;
 
   @override
   Widget build(BuildContext context) {
-    return const ProviderScope(child: MyApp());
+    return ProviderScope(overrides: overrides, child: const MyApp());
   }
 }
 
@@ -68,7 +69,7 @@ class _SprintBoardPageState extends ConsumerState<SprintBoardPage> {
   @override
   Widget build(BuildContext context) {
     ref.listen<String?>(taskListErrorProvider, (previous, next) {
-      if (!kDebugMode || next == null) {
+      if (next == null) {
         return;
       }
 
@@ -102,32 +103,9 @@ class _SprintBoardPageState extends ConsumerState<SprintBoardPage> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Column(
               children: [
-                TextField(
+                _TaskSearchBar(
                   controller: _searchController,
-                  onChanged: (value) {
-                    ref.read(searchQueryProvider.notifier).state = value;
-                  },
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: 'タスクを検索...',
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: searchQuery.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () {
-                              _searchController.clear();
-                              ref.read(searchQueryProvider.notifier).state = '';
-                            },
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
+                  value: searchQuery,
                 ),
                 const SizedBox(height: 10),
                 SizedBox(
@@ -285,18 +263,24 @@ class _SprintBoardPageState extends ConsumerState<SprintBoardPage> {
       return;
     }
 
-    ref
-        .read(taskListProvider.notifier)
-        .addTask(
-          Task(
-            title: result.title,
-            description: result.description,
-            status: result.status,
-            priority: result.priority,
-          ),
-        );
+    try {
+      await ref
+          .read(taskListProvider.notifier)
+          .addTask(
+            Task(
+              title: result.title,
+              description: result.description,
+              status: result.status,
+              priority: result.priority,
+            ),
+          );
 
-    _showSnackBar(context, 'タスクを追加しました');
+      if (!context.mounted) {
+        return;
+      }
+
+      _showSnackBar(context, 'タスクを追加しました');
+    } catch (_) {}
   }
 
   Future<void> _showTaskDetails(
@@ -386,18 +370,24 @@ class _SprintBoardPageState extends ConsumerState<SprintBoardPage> {
       return;
     }
 
-    ref
-        .read(taskListProvider.notifier)
-        .updateTask(
-          task.copyWith(
-            title: result.title,
-            description: result.description,
-            priority: result.priority,
-            status: result.status,
-          ),
-        );
+    try {
+      await ref
+          .read(taskListProvider.notifier)
+          .updateTask(
+            task.copyWith(
+              title: result.title,
+              description: result.description,
+              priority: result.priority,
+              status: result.status,
+            ),
+          );
 
-    _showSnackBar(context, 'タスクを更新しました');
+      if (!context.mounted) {
+        return;
+      }
+
+      _showSnackBar(context, 'タスクを更新しました');
+    } catch (_) {}
   }
 
   Future<void> _confirmAndDeleteTask(
@@ -430,28 +420,105 @@ class _SprintBoardPageState extends ConsumerState<SprintBoardPage> {
       return;
     }
 
-    ref.read(taskListProvider.notifier).deleteTask(task.id);
-    _showSnackBar(context, 'タスクを削除しました');
+    try {
+      await ref.read(taskListProvider.notifier).deleteTask(task.id);
+
+      if (!context.mounted) {
+        return;
+      }
+
+      _showSnackBar(context, 'タスクを削除しました');
+    } catch (_) {}
   }
 
-  void _updateTaskStatus(
+  Future<void> _updateTaskStatus(
     BuildContext context,
     WidgetRef ref,
     Task task,
     TaskStatus nextStatus,
-  ) {
+  ) async {
     if (task.status == nextStatus) {
       return;
     }
 
-    ref.read(taskListProvider.notifier).moveTask(task.id, nextStatus);
-    _showSnackBar(context, '${task.title}を${_statusLabel(nextStatus)}に移動しました');
+    try {
+      await ref.read(taskListProvider.notifier).moveTask(task.id, nextStatus);
+
+      if (!context.mounted) {
+        return;
+      }
+
+      _showSnackBar(
+        context,
+        '${task.title}を${_statusLabel(nextStatus)}に移動しました',
+      );
+    } catch (_) {}
   }
 
   void _showSnackBar(BuildContext context, String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _TaskSearchBar extends ConsumerStatefulWidget {
+  const _TaskSearchBar({required this.controller, required this.value});
+
+  final TextEditingController controller;
+  final String value;
+
+  @override
+  ConsumerState<_TaskSearchBar> createState() => _TaskSearchBarState();
+}
+
+class _TaskSearchBarState extends ConsumerState<_TaskSearchBar> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.text = widget.value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<String>(searchQueryProvider, (previous, next) {
+      if (widget.controller.text == next) {
+        return;
+      }
+
+      widget.controller.value = TextEditingValue(
+        text: next,
+        selection: TextSelection.collapsed(offset: next.length),
+      );
+    });
+
+    return TextField(
+      controller: widget.controller,
+      onChanged: (value) {
+        ref.read(searchQueryProvider.notifier).state = value;
+      },
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: 'タスクを検索...',
+        prefixIcon: const Icon(Icons.search_rounded),
+        suffixIcon: widget.value.isEmpty
+            ? null
+            : IconButton(
+                onPressed: () {
+                  widget.controller.clear();
+                  ref.read(searchQueryProvider.notifier).state = '';
+                },
+                icon: const Icon(Icons.close_rounded),
+              ),
+        filled: true,
+        fillColor: Theme.of(context).colorScheme.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+      ),
+    );
   }
 }
 

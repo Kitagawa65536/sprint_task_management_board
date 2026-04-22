@@ -8,10 +8,6 @@ import '../repositories/task_repository.dart';
 
 typedef SharedPreferencesLoader = Future<SharedPreferences> Function();
 
-final taskRepositoryProvider = Provider<TaskRepository>((ref) {
-  return TaskRepository();
-});
-
 final sharedPreferencesLoaderProvider = Provider<SharedPreferencesLoader>((
   ref,
 ) {
@@ -38,7 +34,7 @@ final taskListProvider =
       );
       return TaskListNotifier(
         repository: repository,
-        sharedPreferencesLoader: sharedPreferencesLoader,
+        legacyPreferencesLoader: sharedPreferencesLoader,
         ref: ref,
       );
     });
@@ -83,11 +79,11 @@ final doneTasksProvider = Provider<List<Task>>((ref) {
 class TaskListNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   TaskListNotifier({
     required TaskRepository repository,
-    required SharedPreferencesLoader sharedPreferencesLoader,
+    required SharedPreferencesLoader legacyPreferencesLoader,
     Ref? ref,
   }) : _ref = ref,
        _repository = repository,
-       _sharedPreferencesLoader = sharedPreferencesLoader,
+       _legacyPreferencesLoader = legacyPreferencesLoader,
        super(const AsyncValue.loading()) {
     _initialization = _loadTasks();
   }
@@ -96,77 +92,105 @@ class TaskListNotifier extends StateNotifier<AsyncValue<List<Task>>> {
 
   final Ref? _ref;
   final TaskRepository _repository;
-  final SharedPreferencesLoader _sharedPreferencesLoader;
-  SharedPreferences? _sharedPreferences;
+  final SharedPreferencesLoader _legacyPreferencesLoader;
+  SharedPreferences? _legacyPreferences;
   late final Future<void> _initialization;
 
   Future<void> get initialization => _initialization;
 
   Future<void> addTask(Task task) async {
-    final tasks = _repository.addTask(task);
-    state = AsyncValue.data(tasks);
-    await _persistTasks(tasks);
+    try {
+      final tasks = await _repository.addTask(task);
+      state = AsyncValue.data(tasks);
+    } catch (_) {
+      _reportError('タスクの保存に失敗しました');
+      rethrow;
+    }
   }
 
   Future<void> updateTask(Task task) async {
-    final tasks = _repository.updateTask(task);
-    state = AsyncValue.data(tasks);
-    await _persistTasks(tasks);
+    try {
+      final tasks = await _repository.updateTask(task);
+      state = AsyncValue.data(tasks);
+    } catch (_) {
+      _reportError('タスクの保存に失敗しました');
+      rethrow;
+    }
   }
 
   Future<void> deleteTask(String id) async {
-    final tasks = _repository.deleteTask(id);
-    state = AsyncValue.data(tasks);
-    await _persistTasks(tasks);
+    try {
+      final tasks = await _repository.deleteTask(id);
+      state = AsyncValue.data(tasks);
+    } catch (_) {
+      _reportError('タスクの保存に失敗しました');
+      rethrow;
+    }
   }
 
   Future<void> moveTask(String id, TaskStatus newStatus) async {
-    final tasks = _repository.moveTask(id, newStatus);
-    state = AsyncValue.data(tasks);
-    await _persistTasks(tasks);
+    try {
+      final tasks = await _repository.moveTask(id, newStatus);
+      state = AsyncValue.data(tasks);
+    } catch (_) {
+      _reportError('タスクの保存に失敗しました');
+      rethrow;
+    }
   }
 
   Future<void> _loadTasks() async {
     try {
-      final sharedPreferences = await _getSharedPreferences();
-      final json = sharedPreferences.getString(storageKey);
-
-      if (json == null || json.isEmpty) {
-        state = AsyncValue.data(_repository.getTasks());
+      final tasks = await _repository.getTasks();
+      if (tasks.isNotEmpty) {
+        state = AsyncValue.data(tasks);
         return;
       }
 
-      final decoded = jsonDecode(json) as List<dynamic>;
-      final loadedTasks = decoded
-          .map((item) => Task.fromJson(Map<String, dynamic>.from(item as Map)))
-          .toList();
-      final nextTasks = loadedTasks.isEmpty ? Task.sampleTasks() : loadedTasks;
-
-      state = AsyncValue.data(_repository.replaceTasks(nextTasks));
+      final legacyTasks = await _loadLegacyTasks();
+      final nextTasks = legacyTasks.isEmpty ? Task.sampleTasks() : legacyTasks;
+      final seededTasks = await _repository.seedIfEmpty(nextTasks);
+      if (legacyTasks.isNotEmpty) {
+        await _clearLegacyTasks();
+      }
+      state = AsyncValue.data(seededTasks);
     } catch (_) {
-      state = AsyncValue.data(_repository.getTasks());
+      state = AsyncValue.data(
+        await _repository.seedIfEmpty(Task.sampleTasks()),
+      );
       _reportError('タスクの読み込みに失敗しました');
     }
   }
 
-  Future<void> _persistTasks(List<Task> tasks) async {
+  Future<List<Task>> _loadLegacyTasks() async {
     try {
-      final sharedPreferences = await _getSharedPreferences();
-      final json = jsonEncode(tasks.map((task) => task.toJson()).toList());
-      await sharedPreferences.setString(storageKey, json);
+      final sharedPreferences = await _getLegacyPreferences();
+      final json = sharedPreferences.getString(storageKey);
+      if (json == null || json.isEmpty) {
+        return const <Task>[];
+      }
+
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded
+          .map((item) => Task.fromJson(Map<String, dynamic>.from(item as Map)))
+          .toList();
     } catch (_) {
-      _reportError('タスクの保存に失敗しました');
+      return const <Task>[];
     }
   }
 
-  Future<SharedPreferences> _getSharedPreferences() async {
-    final sharedPreferences = _sharedPreferences;
+  Future<void> _clearLegacyTasks() async {
+    final sharedPreferences = await _getLegacyPreferences();
+    await sharedPreferences.remove(storageKey);
+  }
+
+  Future<SharedPreferences> _getLegacyPreferences() async {
+    final sharedPreferences = _legacyPreferences;
     if (sharedPreferences != null) {
       return sharedPreferences;
     }
 
-    final loadedSharedPreferences = await _sharedPreferencesLoader();
-    _sharedPreferences = loadedSharedPreferences;
+    final loadedSharedPreferences = await _legacyPreferencesLoader();
+    _legacyPreferences = loadedSharedPreferences;
     return loadedSharedPreferences;
   }
 

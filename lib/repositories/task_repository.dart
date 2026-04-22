@@ -1,49 +1,59 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../database/app_database.dart';
 import '../models/task.dart';
 
+final appDatabaseProvider = Provider<AppDatabase>((ref) {
+  final database = AppDatabase();
+  ref.onDispose(database.close);
+  return database;
+});
+
+final taskRepositoryProvider = Provider<TaskRepository>((ref) {
+  final database = ref.watch(appDatabaseProvider);
+  return TaskRepository(database);
+});
+
 class TaskRepository {
-  TaskRepository({List<Task>? initialTasks})
-    : _tasks = List<Task>.from(initialTasks ?? Task.sampleTasks());
+  TaskRepository(this._database);
 
-  final List<Task> _tasks;
+  final AppDatabase _database;
 
-  List<Task> getTasks() => List.unmodifiable(_tasks);
+  Future<List<Task>> getTasks() {
+    return _database.getTasks();
+  }
 
-  List<Task> replaceTasks(List<Task> tasks) {
-    _tasks
-      ..clear()
-      ..addAll(tasks);
+  Future<List<Task>> replaceTasks(List<Task> tasks) async {
+    await _database.replaceTasks(tasks);
     return getTasks();
   }
 
-  List<Task> addTask(Task task) {
-    _tasks.insert(0, task);
-    return getTasks();
-  }
-
-  List<Task> updateTask(Task task) {
-    final index = _tasks.indexWhere((currentTask) => currentTask.id == task.id);
-
-    if (index == -1) {
+  Future<List<Task>> seedIfEmpty(List<Task> tasks) async {
+    if (!await _database.isEmpty()) {
       return getTasks();
     }
 
-    _tasks[index] = task;
+    await _database.replaceTasks(tasks);
     return getTasks();
   }
 
-  List<Task> deleteTask(String id) {
-    _tasks.removeWhere((task) => task.id == id);
+  Future<List<Task>> addTask(Task task) async {
+    await _database.insertTask(task);
     return getTasks();
   }
 
-  List<Task> moveTask(String id, TaskStatus newStatus) {
-    final index = _tasks.indexWhere((task) => task.id == id);
+  Future<List<Task>> updateTask(Task task) async {
+    await _database.updateTaskRecord(task);
+    return getTasks();
+  }
 
-    if (index == -1) {
-      return getTasks();
-    }
+  Future<List<Task>> deleteTask(String id) async {
+    await _database.deleteTaskRecord(id);
+    return getTasks();
+  }
 
-    _tasks[index] = _tasks[index].copyWith(status: newStatus);
+  Future<List<Task>> moveTask(String id, TaskStatus newStatus) async {
+    await _database.moveTaskRecord(id, newStatus);
     return getTasks();
   }
 }
