@@ -12,7 +12,9 @@ final taskRepositoryProvider = Provider<TaskRepository>((ref) {
   return TaskRepository();
 });
 
-final sharedPreferencesLoaderProvider = Provider<SharedPreferencesLoader>((ref) {
+final sharedPreferencesLoaderProvider = Provider<SharedPreferencesLoader>((
+  ref,
+) {
   return SharedPreferences.getInstance;
 });
 
@@ -20,29 +22,61 @@ final taskListErrorProvider = StateProvider<String?>((ref) {
   return null;
 });
 
+final searchQueryProvider = StateProvider<String>((ref) {
+  return '';
+});
+
+final filterPriorityProvider = StateProvider<TaskPriority?>((ref) {
+  return null;
+});
+
 final taskListProvider =
     StateNotifierProvider<TaskListNotifier, AsyncValue<List<Task>>>((ref) {
-  final repository = ref.watch(taskRepositoryProvider);
-  final sharedPreferencesLoader = ref.watch(sharedPreferencesLoaderProvider);
-  return TaskListNotifier(
-    repository: repository,
-    sharedPreferencesLoader: sharedPreferencesLoader,
-    ref: ref,
-  );
+      final repository = ref.watch(taskRepositoryProvider);
+      final sharedPreferencesLoader = ref.watch(
+        sharedPreferencesLoaderProvider,
+      );
+      return TaskListNotifier(
+        repository: repository,
+        sharedPreferencesLoader: sharedPreferencesLoader,
+        ref: ref,
+      );
+    });
+
+final filteredTasksProvider = Provider<List<Task>>((ref) {
+  final tasks = ref.watch(taskListProvider).valueOrNull ?? const <Task>[];
+  final query = ref.watch(searchQueryProvider).trim().toLowerCase();
+  final priority = ref.watch(filterPriorityProvider);
+
+  return tasks.where((task) {
+    final matchesQuery = query.isEmpty
+        ? true
+        : task.title.toLowerCase().contains(query) ||
+              (task.description?.toLowerCase().contains(query) ?? false);
+    final matchesPriority = priority == null || task.priority == priority;
+
+    return matchesQuery && matchesPriority;
+  }).toList();
+});
+
+final hasActiveTaskFilterProvider = Provider<bool>((ref) {
+  final query = ref.watch(searchQueryProvider).trim();
+  final priority = ref.watch(filterPriorityProvider);
+  return query.isNotEmpty || priority != null;
 });
 
 final todoTasksProvider = Provider<List<Task>>((ref) {
-  final tasks = ref.watch(taskListProvider).valueOrNull ?? const <Task>[];
+  final tasks = ref.watch(filteredTasksProvider);
   return tasks.where((task) => task.status == TaskStatus.todo).toList();
 });
 
 final inProgressTasksProvider = Provider<List<Task>>((ref) {
-  final tasks = ref.watch(taskListProvider).valueOrNull ?? const <Task>[];
+  final tasks = ref.watch(filteredTasksProvider);
   return tasks.where((task) => task.status == TaskStatus.inProgress).toList();
 });
 
 final doneTasksProvider = Provider<List<Task>>((ref) {
-  final tasks = ref.watch(taskListProvider).valueOrNull ?? const <Task>[];
+  final tasks = ref.watch(filteredTasksProvider);
   return tasks.where((task) => task.status == TaskStatus.done).toList();
 });
 

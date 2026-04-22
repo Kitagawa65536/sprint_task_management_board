@@ -43,11 +43,30 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class SprintBoardPage extends ConsumerWidget {
+class SprintBoardPage extends ConsumerStatefulWidget {
   const SprintBoardPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SprintBoardPage> createState() => _SprintBoardPageState();
+}
+
+class _SprintBoardPageState extends ConsumerState<SprintBoardPage> {
+  late final TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     ref.listen<String?>(taskListErrorProvider, (previous, next) {
       if (!kDebugMode || next == null) {
         return;
@@ -62,10 +81,102 @@ class SprintBoardPage extends ConsumerWidget {
 
     final taskListState = ref.watch(taskListProvider);
     final totalTasks = taskListState.valueOrNull?.length ?? 0;
+    final searchQuery = ref.watch(searchQueryProvider);
+    final filterPriority = ref.watch(filterPriorityProvider);
+    final filteredTasks = ref.watch(filteredTasksProvider);
+    final hasActiveFilter = ref.watch(hasActiveTaskFilterProvider);
+
+    if (_searchController.text != searchQuery) {
+      _searchController.value = TextEditingValue(
+        text: searchQuery,
+        selection: TextSelection.collapsed(offset: searchQuery.length),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('スプリントボード'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(92),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _searchController,
+                  onChanged: (value) {
+                    ref.read(searchQueryProvider.notifier).state = value;
+                  },
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: 'タスクを検索...',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: searchQuery.isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () {
+                              _searchController.clear();
+                              ref.read(searchQueryProvider.notifier).state = '';
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                    filled: true,
+                    fillColor: Theme.of(context).colorScheme.surface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 36,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      _PriorityFilterChip(
+                        label: 'すべて',
+                        selected: filterPriority == null,
+                        onSelected: () {
+                          ref.read(filterPriorityProvider.notifier).state =
+                              null;
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      _PriorityFilterChip(
+                        label: '高',
+                        selected: filterPriority == TaskPriority.high,
+                        onSelected: () {
+                          ref.read(filterPriorityProvider.notifier).state =
+                              TaskPriority.high;
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      _PriorityFilterChip(
+                        label: '中',
+                        selected: filterPriority == TaskPriority.medium,
+                        onSelected: () {
+                          ref.read(filterPriorityProvider.notifier).state =
+                              TaskPriority.medium;
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      _PriorityFilterChip(
+                        label: '低',
+                        selected: filterPriority == TaskPriority.low,
+                        onSelected: () {
+                          ref.read(filterPriorityProvider.notifier).state =
+                              TaskPriority.low;
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -85,69 +196,79 @@ class SprintBoardPage extends ConsumerWidget {
       body: taskListState.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, _) => const Center(child: CircularProgressIndicator()),
-        data: (_) => LayoutBuilder(
-          builder: (context, constraints) {
-            final boardSpacing = 56.0;
-            final fittedColumnWidth = (constraints.maxWidth - boardSpacing) / 3;
-            final columnWidth = constraints.maxWidth > 420
-                ? fittedColumnWidth.clamp(220.0, 320.0)
-                : constraints.maxWidth * 0.85;
+        data: (_) {
+          if (hasActiveFilter && filteredTasks.isEmpty) {
+            return const Center(child: Text('該当するタスクがありません'));
+          }
 
-            return SizedBox(
-              height: constraints.maxHeight,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _BoardColumn(
-                      title: '未着手',
-                      status: TaskStatus.todo,
-                      width: columnWidth,
-                      tasksProvider: todoTasksProvider,
-                      onTaskTap: (task) => _showTaskDetails(context, ref, task),
-                      onTaskAccepted: (task) => _updateTaskStatus(
-                        context,
-                        ref,
-                        task,
-                        TaskStatus.todo,
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final boardSpacing = 56.0;
+              final fittedColumnWidth =
+                  (constraints.maxWidth - boardSpacing) / 3;
+              final columnWidth = constraints.maxWidth > 420
+                  ? fittedColumnWidth.clamp(220.0, 320.0)
+                  : constraints.maxWidth * 0.85;
+
+              return SizedBox(
+                height: constraints.maxHeight,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _BoardColumn(
+                        title: '未着手',
+                        status: TaskStatus.todo,
+                        width: columnWidth,
+                        tasksProvider: todoTasksProvider,
+                        onTaskTap: (task) =>
+                            _showTaskDetails(context, ref, task),
+                        onTaskAccepted: (task) => _updateTaskStatus(
+                          context,
+                          ref,
+                          task,
+                          TaskStatus.todo,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    _BoardColumn(
-                      title: '進行中',
-                      status: TaskStatus.inProgress,
-                      width: columnWidth,
-                      tasksProvider: inProgressTasksProvider,
-                      onTaskTap: (task) => _showTaskDetails(context, ref, task),
-                      onTaskAccepted: (task) => _updateTaskStatus(
-                        context,
-                        ref,
-                        task,
-                        TaskStatus.inProgress,
+                      const SizedBox(width: 12),
+                      _BoardColumn(
+                        title: '進行中',
+                        status: TaskStatus.inProgress,
+                        width: columnWidth,
+                        tasksProvider: inProgressTasksProvider,
+                        onTaskTap: (task) =>
+                            _showTaskDetails(context, ref, task),
+                        onTaskAccepted: (task) => _updateTaskStatus(
+                          context,
+                          ref,
+                          task,
+                          TaskStatus.inProgress,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    _BoardColumn(
-                      title: '完了',
-                      status: TaskStatus.done,
-                      width: columnWidth,
-                      tasksProvider: doneTasksProvider,
-                      onTaskTap: (task) => _showTaskDetails(context, ref, task),
-                      onTaskAccepted: (task) => _updateTaskStatus(
-                        context,
-                        ref,
-                        task,
-                        TaskStatus.done,
+                      const SizedBox(width: 12),
+                      _BoardColumn(
+                        title: '完了',
+                        status: TaskStatus.done,
+                        width: columnWidth,
+                        tasksProvider: doneTasksProvider,
+                        onTaskTap: (task) =>
+                            _showTaskDetails(context, ref, task),
+                        onTaskAccepted: (task) => _updateTaskStatus(
+                          context,
+                          ref,
+                          task,
+                          TaskStatus.done,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
-        ),
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -389,30 +510,26 @@ class _BoardColumnState extends ConsumerState<_BoardColumn> {
                       color: headerColor.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(
-                      widget.title,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: headerColor,
-                      ),
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: headerColor.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    '${tasks.length}',
-                    style: TextStyle(
-                      color: headerColor,
-                      fontWeight: FontWeight.w700,
+                    child: Row(
+                      children: [
+                        Text(
+                          widget.title,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: headerColor,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '(${tasks.length}件)',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: headerColor,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -680,6 +797,28 @@ class _TaskFormResult {
   final String? description;
   final TaskStatus status;
   final TaskPriority priority;
+}
+
+class _PriorityFilterChip extends StatelessWidget {
+  const _PriorityFilterChip({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onSelected(),
+      showCheckmark: false,
+    );
+  }
 }
 
 class _TaskCard extends StatelessWidget {
