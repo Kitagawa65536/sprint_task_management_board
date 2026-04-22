@@ -63,29 +63,36 @@ class SprintBoardPage extends ConsumerWidget {
                 children: [
                   _BoardColumn(
                     title: '未着手',
+                    status: TaskStatus.todo,
                     width: columnWidth,
                     tasksProvider: todoTasksProvider,
                     onTaskTap: (task) => _showTaskDetails(context, ref, task),
-                    onTaskLongPress: (task) =>
-                        _showTaskActions(context, ref, task),
+                    onTaskAccepted: (task) =>
+                        _updateTaskStatus(context, ref, task, TaskStatus.todo),
                   ),
                   const SizedBox(width: 12),
                   _BoardColumn(
                     title: '進行中',
+                    status: TaskStatus.inProgress,
                     width: columnWidth,
                     tasksProvider: inProgressTasksProvider,
                     onTaskTap: (task) => _showTaskDetails(context, ref, task),
-                    onTaskLongPress: (task) =>
-                        _showTaskActions(context, ref, task),
+                    onTaskAccepted: (task) => _updateTaskStatus(
+                      context,
+                      ref,
+                      task,
+                      TaskStatus.inProgress,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   _BoardColumn(
                     title: '完了',
+                    status: TaskStatus.done,
                     width: columnWidth,
                     tasksProvider: doneTasksProvider,
                     onTaskTap: (task) => _showTaskDetails(context, ref, task),
-                    onTaskLongPress: (task) =>
-                        _showTaskActions(context, ref, task),
+                    onTaskAccepted: (task) =>
+                        _updateTaskStatus(context, ref, task, TaskStatus.done),
                   ),
                 ],
               ),
@@ -257,44 +264,6 @@ class SprintBoardPage extends ConsumerWidget {
     _showSnackBar(context, 'タスクを削除しました');
   }
 
-  Future<void> _showTaskActions(
-    BuildContext context,
-    WidgetRef ref,
-    Task task,
-  ) async {
-    final nextStatuses = TaskStatus.values
-        .where((status) => status != task.status)
-        .toList();
-
-    final selectedStatus = await showModalBottomSheet<TaskStatus>(
-      context: context,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(title: Text(task.title), subtitle: const Text('移動先を選択')),
-              for (final status in nextStatuses)
-                ListTile(
-                  leading: const Icon(Icons.swap_horiz),
-                  title: Text('${_statusActionLabel(status)}に移動'),
-                  onTap: () => Navigator.of(sheetContext).pop(status),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (!context.mounted) {
-      return;
-    }
-
-    if (selectedStatus != null) {
-      _updateTaskStatus(context, ref, task, selectedStatus);
-    }
-  }
-
   void _updateTaskStatus(
     BuildContext context,
     WidgetRef ref,
@@ -306,7 +275,7 @@ class SprintBoardPage extends ConsumerWidget {
     }
 
     ref.read(taskListProvider.notifier).moveTask(task.id, nextStatus);
-    _showSnackBar(context, 'タスクを${_statusLabel(nextStatus)}に変更しました');
+    _showSnackBar(context, '${task.title}を${_statusLabel(nextStatus)}に移動しました');
   }
 
   void _showSnackBar(BuildContext context, String message) {
@@ -316,27 +285,36 @@ class SprintBoardPage extends ConsumerWidget {
   }
 }
 
-class _BoardColumn extends ConsumerWidget {
+class _BoardColumn extends ConsumerStatefulWidget {
   const _BoardColumn({
     required this.title,
+    required this.status,
     required this.width,
     required this.tasksProvider,
     required this.onTaskTap,
-    required this.onTaskLongPress,
+    required this.onTaskAccepted,
   });
 
   final String title;
+  final TaskStatus status;
   final double width;
   final ProviderListenable<List<Task>> tasksProvider;
   final ValueChanged<Task> onTaskTap;
-  final ValueChanged<Task> onTaskLongPress;
+  final ValueChanged<Task> onTaskAccepted;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tasks = ref.watch(tasksProvider);
+  ConsumerState<_BoardColumn> createState() => _BoardColumnState();
+}
+
+class _BoardColumnState extends ConsumerState<_BoardColumn> {
+  bool _isHighlighted = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tasks = ref.watch(widget.tasksProvider);
 
     return Container(
-      width: width,
+      width: widget.width,
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
         borderRadius: BorderRadius.circular(16),
@@ -351,7 +329,7 @@ class _BoardColumn extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    title,
+                    widget.title,
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
@@ -379,29 +357,70 @@ class _BoardColumn extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
             Expanded(
-              child: tasks.isEmpty
-                  ? Center(
-                      child: Text(
-                        'タスクがありません',
-                        style: TextStyle(color: Colors.grey.shade600),
+              child: DragTarget<Task>(
+                onWillAcceptWithDetails: (details) {
+                  final canAccept = details.data.status != widget.status;
+                  setState(() {
+                    _isHighlighted = canAccept;
+                  });
+                  return canAccept;
+                },
+                onLeave: (_) {
+                  if (_isHighlighted) {
+                    setState(() {
+                      _isHighlighted = false;
+                    });
+                  }
+                },
+                onAcceptWithDetails: (details) {
+                  widget.onTaskAccepted(details.data);
+                  setState(() {
+                    _isHighlighted = false;
+                  });
+                },
+                builder: (context, candidateData, rejectedData) {
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    decoration: BoxDecoration(
+                      color: _isHighlighted
+                          ? Colors.blue.withValues(alpha: 0.12)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _isHighlighted
+                            ? Colors.blue.shade300
+                            : Colors.transparent,
+                        width: 1.5,
                       ),
-                    )
-                  : ListView.separated(
-                      itemCount: tasks.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final task = tasks[index];
-
-                        return _TaskCard(
-                          task: task,
-                          priorityColor: _priorityColor(task.priority),
-                          priorityLabel: _priorityLabel(task.priority),
-                          createdAtLabel: _formatCreatedAt(task.createdAt),
-                          onTap: () => onTaskTap(task),
-                          onLongPress: () => onTaskLongPress(task),
-                        );
-                      },
                     ),
+                    child: tasks.isEmpty
+                        ? Center(
+                            child: Text(
+                              'タスクがありません',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(6),
+                            itemCount: tasks.length,
+                            separatorBuilder: (_, _) => const SizedBox(height: 10),
+                            itemBuilder: (context, index) {
+                              final task = tasks[index];
+
+                              return _TaskCard(
+                                task: task,
+                                cardWidth: widget.width - 36,
+                                priorityColor: _priorityColor(task.priority),
+                                priorityLabel: _priorityLabel(task.priority),
+                                createdAtLabel: _formatCreatedAt(task.createdAt),
+                                onTap: () => widget.onTaskTap(task),
+                              );
+                            },
+                          ),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -568,29 +587,28 @@ class _TaskFormResult {
 class _TaskCard extends StatelessWidget {
   const _TaskCard({
     required this.task,
+    required this.cardWidth,
     required this.priorityColor,
     required this.priorityLabel,
     required this.createdAtLabel,
     required this.onTap,
-    required this.onLongPress,
   });
 
   final Task task;
+  final double cardWidth;
   final Color priorityColor;
   final String priorityLabel;
   final String createdAtLabel;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final card = Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
-        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -636,6 +654,21 @@ class _TaskCard extends StatelessWidget {
         ),
       ),
     );
+
+    return LongPressDraggable<Task>(
+      data: task,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: Opacity(
+        opacity: 0.7,
+        child: Material(
+          elevation: 4,
+          color: Colors.transparent,
+          child: SizedBox(width: cardWidth, child: card),
+        ),
+      ),
+      childWhenDragging: Opacity(opacity: 0.7, child: card),
+      child: card,
+    );
   }
 }
 
@@ -671,17 +704,6 @@ String _priorityLabel(TaskPriority priority) {
 }
 
 String _statusLabel(TaskStatus status) {
-  switch (status) {
-    case TaskStatus.todo:
-      return '未着手';
-    case TaskStatus.inProgress:
-      return '進行中';
-    case TaskStatus.done:
-      return '完了';
-  }
-}
-
-String _statusActionLabel(TaskStatus status) {
   switch (status) {
     case TaskStatus.todo:
       return '未着手';
