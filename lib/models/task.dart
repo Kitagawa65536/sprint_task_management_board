@@ -18,7 +18,7 @@ class Task {
   final String id;
   final String title;
   final String? description;
-  final TaskStatus status;
+  TaskStatus status;
   final TaskPriority priority;
   final DateTime createdAt;
 

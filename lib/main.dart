@@ -82,6 +82,104 @@ class _SprintBoardPageState extends State<SprintBoardPage> {
     );
   }
 
+  Future<void> _showTaskDetails(Task task) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(task.title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(task.description ?? '説明はありません'),
+              const SizedBox(height: 16),
+              Text('ステータス: ${_statusLabel(task.status)}'),
+              const SizedBox(height: 8),
+              Text('優先度: ${_priorityLabel(task.priority)}'),
+              const SizedBox(height: 8),
+              Text('作成日時: ${_formatCreatedAt(task.createdAt)}'),
+              const SizedBox(height: 20),
+              const Text(
+                'ステータス変更',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<TaskStatus>(
+                segments: const [
+                  ButtonSegment(value: TaskStatus.todo, label: Text('未着手')),
+                  ButtonSegment(
+                    value: TaskStatus.inProgress,
+                    label: Text('進行中'),
+                  ),
+                  ButtonSegment(value: TaskStatus.done, label: Text('完了')),
+                ],
+                selected: {task.status},
+                onSelectionChanged: (selected) {
+                  final nextStatus = selected.first;
+                  Navigator.of(dialogContext).pop();
+                  _updateTaskStatus(task, nextStatus);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('閉じる'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showTaskActions(Task task) async {
+    final nextStatuses = TaskStatus.values
+        .where((status) => status != task.status)
+        .toList();
+
+    final selectedStatus = await showModalBottomSheet<TaskStatus>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(title: Text(task.title), subtitle: const Text('移動先を選択')),
+              for (final status in nextStatuses)
+                ListTile(
+                  leading: const Icon(Icons.swap_horiz),
+                  title: Text('${_statusActionLabel(status)}に移動'),
+                  onTap: () => Navigator.of(sheetContext).pop(status),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (selectedStatus != null) {
+      _updateTaskStatus(task, selectedStatus);
+    }
+  }
+
+  void _updateTaskStatus(Task task, TaskStatus nextStatus) {
+    if (task.status == nextStatus) {
+      return;
+    }
+
+    setState(() {
+      task.status = nextStatus;
+    });
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text('タスクを${_statusLabel(nextStatus)}に変更しました')),
+      );
+  }
+
   Widget _buildBoardColumn({
     required String title,
     required TaskStatus status,
@@ -144,6 +242,8 @@ class _SprintBoardPageState extends State<SprintBoardPage> {
                     priorityColor: _priorityColor(task.priority),
                     priorityLabel: _priorityLabel(task.priority),
                     createdAtLabel: _formatCreatedAt(task.createdAt),
+                    onTap: () => _showTaskDetails(task),
+                    onLongPress: () => _showTaskActions(task),
                   );
                 },
               ),
@@ -184,6 +284,28 @@ class _SprintBoardPageState extends State<SprintBoardPage> {
         return 'High';
     }
   }
+
+  String _statusLabel(TaskStatus status) {
+    switch (status) {
+      case TaskStatus.todo:
+        return '未着手';
+      case TaskStatus.inProgress:
+        return '進行中';
+      case TaskStatus.done:
+        return '完了';
+    }
+  }
+
+  String _statusActionLabel(TaskStatus status) {
+    switch (status) {
+      case TaskStatus.todo:
+        return '未着手';
+      case TaskStatus.inProgress:
+        return '進行中';
+      case TaskStatus.done:
+        return '完了';
+    }
+  }
 }
 
 class _TaskCard extends StatelessWidget {
@@ -192,56 +314,68 @@ class _TaskCard extends StatelessWidget {
     required this.priorityColor,
     required this.priorityLabel,
     required this.createdAtLabel,
+    required this.onTap,
+    required this.onLongPress,
   });
 
   final Task task;
   final Color priorityColor;
   final String priorityLabel;
   final String createdAtLabel;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              task.title,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              task.description ?? '説明はありません',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Colors.grey.shade700, height: 1.4),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: priorityColor.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                priorityLabel,
-                style: TextStyle(
-                  color: priorityColor,
-                  fontSize: 12,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                task.title,
+                style: const TextStyle(
                   fontWeight: FontWeight.w700,
+                  fontSize: 16,
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              createdAtLabel,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                task.description ?? '説明はありません',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: Colors.grey.shade700, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: priorityColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  priorityLabel,
+                  style: TextStyle(
+                    color: priorityColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                createdAtLabel,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
         ),
       ),
     );
