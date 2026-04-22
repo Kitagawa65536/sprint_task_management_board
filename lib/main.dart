@@ -42,6 +42,10 @@ class _SprintBoardPageState extends State<SprintBoardPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('スプリントボード')),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openTaskCreatePage,
+        child: const Icon(Icons.add),
+      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final columnWidth = constraints.maxWidth > 420
@@ -80,6 +84,31 @@ class _SprintBoardPageState extends State<SprintBoardPage> {
         },
       ),
     );
+  }
+
+  Future<void> _openTaskCreatePage() async {
+    final createdTask = await Navigator.of(context).push<Task>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => const _TaskCreatePage(),
+      ),
+    );
+
+    if (createdTask == null) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _tasks.insert(0, createdTask);
+    });
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('タスクを追加しました')));
   }
 
   Future<void> _showTaskDetails(Task task) async {
@@ -305,6 +334,176 @@ class _SprintBoardPageState extends State<SprintBoardPage> {
       case TaskStatus.done:
         return '完了';
     }
+  }
+}
+
+class _TaskCreatePage extends StatefulWidget {
+  const _TaskCreatePage();
+
+  @override
+  State<_TaskCreatePage> createState() => _TaskCreatePageState();
+}
+
+class _TaskCreatePageState extends State<_TaskCreatePage> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+
+  TaskPriority _priority = TaskPriority.medium;
+  TaskStatus _status = TaskStatus.todo;
+
+  bool get _isFormValid {
+    final title = _titleController.text.trim();
+    final description = _descriptionController.text.trim();
+
+    return title.isNotEmpty && title.length <= 50 && description.length <= 200;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController.addListener(_onFormChanged);
+    _descriptionController.addListener(_onFormChanged);
+  }
+
+  @override
+  void dispose() {
+    _titleController
+      ..removeListener(_onFormChanged)
+      ..dispose();
+    _descriptionController
+      ..removeListener(_onFormChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('タスク追加'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FilledButton(
+              onPressed: _isFormValid ? _saveTask : null,
+              child: const Text('保存'),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              TextFormField(
+                controller: _titleController,
+                maxLength: 50,
+                decoration: const InputDecoration(
+                  labelText: 'タイトル',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  final title = value?.trim() ?? '';
+                  if (title.isEmpty) {
+                    return 'タイトルは必須です';
+                  }
+                  if (title.length > 50) {
+                    return 'タイトルは50文字以内で入力してください';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _descriptionController,
+                maxLength: 200,
+                minLines: 4,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: '説明文',
+                  alignLabelWithHint: true,
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  final description = value?.trim() ?? '';
+                  if (description.length > 200) {
+                    return '説明文は200文字以内で入力してください';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                '優先度',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<TaskPriority>(
+                segments: const [
+                  ButtonSegment(value: TaskPriority.low, label: Text('低')),
+                  ButtonSegment(value: TaskPriority.medium, label: Text('中')),
+                  ButtonSegment(value: TaskPriority.high, label: Text('高')),
+                ],
+                selected: {_priority},
+                onSelectionChanged: (selected) {
+                  setState(() {
+                    _priority = selected.first;
+                  });
+                },
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'ステータス',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<TaskStatus>(
+                segments: const [
+                  ButtonSegment(value: TaskStatus.todo, label: Text('未着手')),
+                  ButtonSegment(
+                    value: TaskStatus.inProgress,
+                    label: Text('進行中'),
+                  ),
+                  ButtonSegment(value: TaskStatus.done, label: Text('完了')),
+                ],
+                selected: {_status},
+                onSelectionChanged: (selected) {
+                  setState(() {
+                    _status = selected.first;
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _onFormChanged() {
+    setState(() {});
+  }
+
+  void _saveTask() {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final description = _descriptionController.text.trim();
+
+    Navigator.of(context).pop(
+      Task(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: _titleController.text.trim(),
+        description: description.isEmpty ? null : description,
+        status: _status,
+        priority: _priority,
+        createdAt: DateTime.now(),
+      ),
+    );
   }
 }
 

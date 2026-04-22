@@ -48,4 +48,37 @@ void main() {
     expect(find.text('タスクを進行中に変更しました'), findsOneWidget);
     expect(find.text('未着手'), findsOneWidget);
   });
+
+  testWidgets('User can add a task from fullscreen dialog', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const SprintBoardApp());
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+
+    expect(find.text('タスク追加'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '保存'))
+          .onPressed,
+      isNull,
+    );
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'タイトル'), '新規タスク');
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '保存'))
+          .onPressed,
+      isNotNull,
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('タスクを追加しました'), findsOneWidget);
+    expect(find.text('新規タスク'), findsOneWidget);
+  });
 }
