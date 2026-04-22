@@ -87,20 +87,29 @@ class _SprintBoardPageState extends State<SprintBoardPage> {
   }
 
   Future<void> _openTaskCreatePage() async {
-    final createdTask = await Navigator.of(context).push<Task>(
+    final result = await Navigator.of(context).push<_TaskFormResult>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (context) => const _TaskCreatePage(),
+        builder: (context) => const _TaskFormPage(),
       ),
     );
 
-    if (createdTask == null) {
+    if (result == null) {
       return;
     }
 
     if (!mounted) {
       return;
     }
+
+    final createdTask = Task(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: result.title,
+      description: result.description,
+      status: result.status,
+      priority: result.priority,
+      createdAt: DateTime.now(),
+    );
 
     setState(() {
       _tasks.insert(0, createdTask);
@@ -154,6 +163,21 @@ class _SprintBoardPageState extends State<SprintBoardPage> {
           ),
           actions: [
             TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _openTaskEditPage(task);
+              },
+              child: const Text('編集'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _confirmAndDeleteTask(task);
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('削除'),
+            ),
+            TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('閉じる'),
             ),
@@ -161,6 +185,66 @@ class _SprintBoardPageState extends State<SprintBoardPage> {
         );
       },
     );
+  }
+
+  Future<void> _openTaskEditPage(Task task) async {
+    final result = await Navigator.of(context).push<_TaskFormResult>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => _TaskFormPage(task: task),
+      ),
+    );
+
+    if (result == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      task
+        ..title = result.title
+        ..description = result.description
+        ..priority = result.priority
+        ..status = result.status;
+    });
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('タスクを更新しました')));
+  }
+
+  Future<void> _confirmAndDeleteTask(Task task) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('タスクを削除'),
+          content: const Text('このタスクを削除しますか？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('キャンセル'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('削除'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _tasks.remove(task);
+    });
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('タスクを削除しました')));
   }
 
   Future<void> _showTaskActions(Task task) async {
@@ -260,22 +344,29 @@ class _SprintBoardPageState extends State<SprintBoardPage> {
             ),
             const SizedBox(height: 12),
             Expanded(
-              child: ListView.separated(
-                itemCount: tasks.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
-                itemBuilder: (context, index) {
-                  final task = tasks[index];
+              child: tasks.isEmpty
+                  ? Center(
+                      child: Text(
+                        'タスクがありません',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: tasks.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final task = tasks[index];
 
-                  return _TaskCard(
-                    task: task,
-                    priorityColor: _priorityColor(task.priority),
-                    priorityLabel: _priorityLabel(task.priority),
-                    createdAtLabel: _formatCreatedAt(task.createdAt),
-                    onTap: () => _showTaskDetails(task),
-                    onLongPress: () => _showTaskActions(task),
-                  );
-                },
-              ),
+                        return _TaskCard(
+                          task: task,
+                          priorityColor: _priorityColor(task.priority),
+                          priorityLabel: _priorityLabel(task.priority),
+                          createdAtLabel: _formatCreatedAt(task.createdAt),
+                          onTap: () => _showTaskDetails(task),
+                          onLongPress: () => _showTaskActions(task),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
@@ -337,14 +428,16 @@ class _SprintBoardPageState extends State<SprintBoardPage> {
   }
 }
 
-class _TaskCreatePage extends StatefulWidget {
-  const _TaskCreatePage();
+class _TaskFormPage extends StatefulWidget {
+  const _TaskFormPage({this.task});
+
+  final Task? task;
 
   @override
-  State<_TaskCreatePage> createState() => _TaskCreatePageState();
+  State<_TaskFormPage> createState() => _TaskFormPageState();
 }
 
-class _TaskCreatePageState extends State<_TaskCreatePage> {
+class _TaskFormPageState extends State<_TaskFormPage> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -362,6 +455,13 @@ class _TaskCreatePageState extends State<_TaskCreatePage> {
   @override
   void initState() {
     super.initState();
+    final task = widget.task;
+    if (task != null) {
+      _titleController.text = task.title;
+      _descriptionController.text = task.description ?? '';
+      _priority = task.priority;
+      _status = task.status;
+    }
     _titleController.addListener(_onFormChanged);
     _descriptionController.addListener(_onFormChanged);
   }
@@ -381,7 +481,7 @@ class _TaskCreatePageState extends State<_TaskCreatePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('タスク追加'),
+        title: Text(widget.task == null ? 'タスク追加' : 'タスク編集'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -495,16 +595,28 @@ class _TaskCreatePageState extends State<_TaskCreatePage> {
     final description = _descriptionController.text.trim();
 
     Navigator.of(context).pop(
-      Task(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+      _TaskFormResult(
         title: _titleController.text.trim(),
         description: description.isEmpty ? null : description,
         status: _status,
         priority: _priority,
-        createdAt: DateTime.now(),
       ),
     );
   }
+}
+
+class _TaskFormResult {
+  const _TaskFormResult({
+    required this.title,
+    required this.description,
+    required this.status,
+    required this.priority,
+  });
+
+  final String title;
+  final String? description;
+  final TaskStatus status;
+  final TaskPriority priority;
 }
 
 class _TaskCard extends StatelessWidget {

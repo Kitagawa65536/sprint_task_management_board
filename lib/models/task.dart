@@ -16,10 +16,10 @@ class Task {
        createdAt = createdAt ?? DateTime.now();
 
   final String id;
-  final String title;
-  final String? description;
+  String title;
+  String? description;
   TaskStatus status;
-  final TaskPriority priority;
+  TaskPriority priority;
   final DateTime createdAt;
 
   static List<Task> sampleTasks() {

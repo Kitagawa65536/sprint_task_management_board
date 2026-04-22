@@ -81,4 +81,70 @@ void main() {
     expect(find.text('タスクを追加しました'), findsOneWidget);
     expect(find.text('新規タスク'), findsOneWidget);
   });
+
+  testWidgets('User can edit a task from detail dialog', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const SprintBoardApp());
+
+    await tester.tap(find.text('ログイン画面のUI確認'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextButton, '編集'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('タスク編集'), findsOneWidget);
+    expect(find.text('ログイン画面のUI確認'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'タイトル'),
+      'ログイン画面の文言調整',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '説明文'),
+      'フォーム文言と案内テキストを更新する',
+    );
+    await tester.pump();
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SegmentedButton<TaskStatus>),
+        matching: find.text('完了'),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('タスクを更新しました'), findsOneWidget);
+    expect(find.text('ログイン画面の文言調整'), findsOneWidget);
+    expect(find.text('ログイン画面のUI確認'), findsNothing);
+  });
+
+  testWidgets('User can delete tasks and empty column shows placeholder', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const SprintBoardApp());
+
+    await tester.tap(find.text('バーンダウンチャート更新'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '削除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '削除').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('タスクを削除しました'), findsOneWidget);
+    expect(find.text('バーンダウンチャート更新'), findsNothing);
+
+    await tester.tap(find.text('リリースノート草案作成'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '削除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '削除').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('リリースノート草案作成'), findsNothing);
+    expect(find.text('タスクがありません'), findsOneWidget);
+  });
 }
