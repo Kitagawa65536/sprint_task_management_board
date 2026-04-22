@@ -10,12 +10,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sprint_task_management_board/main.dart';
 
 void main() {
-  testWidgets('Sprint board shows sample tasks', (WidgetTester tester) async {
+  testWidgets('Sprint board shows kanban columns and sample tasks', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const SprintBoardApp());
 
     expect(find.text('スプリントボード'), findsOneWidget);
+    expect(find.text('未着手'), findsOneWidget);
+    expect(find.text('進行中'), findsOneWidget);
+    expect(find.text('完了'), findsOneWidget);
     expect(find.text('ログイン画面のUI確認'), findsOneWidget);
     expect(find.text('API接続エラーの調査'), findsOneWidget);
-    expect(find.text('Done'), findsNWidgets(2));
+    expect(find.text('High'), findsNWidgets(2));
+    expect(find.text('04/20 09:00'), findsOneWidget);
   });
 }
