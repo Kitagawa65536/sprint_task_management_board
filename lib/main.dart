@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models/task.dart';
@@ -39,66 +40,84 @@ class SprintBoardPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen<String?>(taskListErrorProvider, (previous, next) {
+      if (!kDebugMode || next == null) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(next)));
+
+      ref.read(taskListErrorProvider.notifier).state = null;
+    });
+
+    final taskListState = ref.watch(taskListProvider);
+
     return Scaffold(
       appBar: AppBar(title: const Text('スプリントボード')),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openTaskCreatePage(context, ref),
         child: const Icon(Icons.add),
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final boardSpacing = 56.0;
-          final fittedColumnWidth = (constraints.maxWidth - boardSpacing) / 3;
-          final columnWidth = constraints.maxWidth > 420
-              ? fittedColumnWidth.clamp(220.0, 320.0)
-              : constraints.maxWidth * 0.85;
+      body: taskListState.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, _) => const Center(child: CircularProgressIndicator()),
+        data: (_) => LayoutBuilder(
+          builder: (context, constraints) {
+            final boardSpacing = 56.0;
+            final fittedColumnWidth = (constraints.maxWidth - boardSpacing) / 3;
+            final columnWidth = constraints.maxWidth > 420
+                ? fittedColumnWidth.clamp(220.0, 320.0)
+                : constraints.maxWidth * 0.85;
 
-          return SizedBox(
-            height: constraints.maxHeight,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _BoardColumn(
-                    title: '未着手',
-                    status: TaskStatus.todo,
-                    width: columnWidth,
-                    tasksProvider: todoTasksProvider,
-                    onTaskTap: (task) => _showTaskDetails(context, ref, task),
-                    onTaskAccepted: (task) =>
-                        _updateTaskStatus(context, ref, task, TaskStatus.todo),
-                  ),
-                  const SizedBox(width: 12),
-                  _BoardColumn(
-                    title: '進行中',
-                    status: TaskStatus.inProgress,
-                    width: columnWidth,
-                    tasksProvider: inProgressTasksProvider,
-                    onTaskTap: (task) => _showTaskDetails(context, ref, task),
-                    onTaskAccepted: (task) => _updateTaskStatus(
-                      context,
-                      ref,
-                      task,
-                      TaskStatus.inProgress,
+            return SizedBox(
+              height: constraints.maxHeight,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _BoardColumn(
+                      title: '未着手',
+                      status: TaskStatus.todo,
+                      width: columnWidth,
+                      tasksProvider: todoTasksProvider,
+                      onTaskTap: (task) => _showTaskDetails(context, ref, task),
+                      onTaskAccepted: (task) =>
+                          _updateTaskStatus(context, ref, task, TaskStatus.todo),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  _BoardColumn(
-                    title: '完了',
-                    status: TaskStatus.done,
-                    width: columnWidth,
-                    tasksProvider: doneTasksProvider,
-                    onTaskTap: (task) => _showTaskDetails(context, ref, task),
-                    onTaskAccepted: (task) =>
-                        _updateTaskStatus(context, ref, task, TaskStatus.done),
-                  ),
-                ],
+                    const SizedBox(width: 12),
+                    _BoardColumn(
+                      title: '進行中',
+                      status: TaskStatus.inProgress,
+                      width: columnWidth,
+                      tasksProvider: inProgressTasksProvider,
+                      onTaskTap: (task) => _showTaskDetails(context, ref, task),
+                      onTaskAccepted: (task) => _updateTaskStatus(
+                        context,
+                        ref,
+                        task,
+                        TaskStatus.inProgress,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _BoardColumn(
+                      title: '完了',
+                      status: TaskStatus.done,
+                      width: columnWidth,
+                      tasksProvider: doneTasksProvider,
+                      onTaskTap: (task) => _showTaskDetails(context, ref, task),
+                      onTaskAccepted: (task) =>
+                          _updateTaskStatus(context, ref, task, TaskStatus.done),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

@@ -8,6 +8,13 @@ class TaskRepository {
 
   List<Task> getTasks() => List.unmodifiable(_tasks);
 
+  List<Task> replaceTasks(List<Task> tasks) {
+    _tasks
+      ..clear()
+      ..addAll(tasks);
+    return getTasks();
+  }
+
   List<Task> addTask(Task task) {
     _tasks.insert(0, task);
     return getTasks();

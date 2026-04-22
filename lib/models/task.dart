@@ -43,6 +43,28 @@ class Task {
     );
   }
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'status': status.name,
+      'priority': priority.name,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+
+  factory Task.fromJson(Map<String, dynamic> json) {
+    return Task(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      description: json['description'] as String?,
+      status: TaskStatus.values.byName(json['status'] as String),
+      priority: TaskPriority.values.byName(json['priority'] as String),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+    );
+  }
+
   static List<Task> sampleTasks() {
     return [
       Task(

@@ -7,6 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:sprint_task_management_board/main.dart';
 import 'package:sprint_task_management_board/models/task.dart';
@@ -15,7 +16,9 @@ void main() {
   testWidgets('Sprint board shows kanban columns and sample tasks', (
     WidgetTester tester,
   ) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const SprintBoardApp());
+    await tester.pumpAndSettle();
 
     expect(find.text('スプリントボード'), findsOneWidget);
     expect(find.text('未着手'), findsOneWidget);
@@ -30,7 +33,9 @@ void main() {
   testWidgets('Task status changes from detail dialog', (
     WidgetTester tester,
   ) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const SprintBoardApp());
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('ログイン画面のUI確認'));
     await tester.pumpAndSettle();
@@ -45,14 +50,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('タスクを進行中に変更しました'), findsOneWidget);
+    expect(
+      find.text('ログイン画面のUI確認を進行中に移動しました'),
+      findsOneWidget,
+    );
     expect(find.text('未着手'), findsOneWidget);
   });
 
   testWidgets('User can add a task from fullscreen dialog', (
     WidgetTester tester,
   ) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const SprintBoardApp());
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.add));
     await tester.pumpAndSettle();
@@ -85,7 +95,9 @@ void main() {
   testWidgets('User can edit a task from detail dialog', (
     WidgetTester tester,
   ) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const SprintBoardApp());
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('ログイン画面のUI確認'));
     await tester.pumpAndSettle();
@@ -125,7 +137,9 @@ void main() {
   testWidgets('User can delete tasks and empty column shows placeholder', (
     WidgetTester tester,
   ) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const SprintBoardApp());
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('バーンダウンチャート更新'));
     await tester.pumpAndSettle();
